@@ -1,0 +1,66 @@
+<?php
+
+define(SF_IMPORT_DAEMON_STATUS_FILE, "/path/to/sf_import_daemon/status/file");
+
+/**
+ * Implementation of hook_cron()
+ * On cron run, we check to see if the process ID for the Salesforce Import
+ * Process Daemon is still active. If it isn't, the module deletes the
+ * config file and restarts the process.
+ */
+function sf_import_daemon_restart_cron() {
+  $status = NULL;
+  $cmd = '/usr/local/bin/drush -r /drupal/document/root -l http://www.example.com sip start --verbose';
+
+  // Check if the process is actually running
+  if ($pid = sf_import_daemon_restart_get_pid()) {
+    $status = shell_exec("ps -p $pid | grep $pid");
+    // If it is not running, remove the log and txt file and restart the import
+    // daemon
+    if (!$status) {
+      if (file_exists(SF_IMPORT_DAEMON_STATUS_FILE)) {
+        unlink(SF_IMPORT_DAEMON_STATUS_FILE);
+        watchdog('sf_import_daemon_restart', 'PID exists in status file but is not currently active. Deleted the old SF Import Process Daemon config file and restarted the process.');
+        shell_exec($cmd);
+        watchdog('sf_import_daemon_restart', 'Finished restarting the daemon.');
+      }
+    }
+  } else {
+    // The PID was not found, so we will restart the process.
+    if (file_exists(SF_IMPORT_DAEMON_STATUS_FILE)) {
+      unlink(SF_IMPORT_DAEMON_STATUS_FILE);
+    }
+    watchdog('sf_import_daemon_restart', 'Could not find a PID in the status file. Deleted the status file and restarted the SF Import Process daemon.');
+    shell_exec($cmd);
+    watchdog('sf_import_daemon_restart', 'Finished restarting the daemon');
+  }
+}
+
+/**
+ * Returns the Process ID for the SF Import Daemon based on what is stored in
+ * the SF_IMPORT_DAEMON_STATUS_FILE file.
+ *
+ * @param string $file
+ *   Optionally pass in a path to the config file
+ * @return int $pid
+ *   The process ID as set in the config file, or NULL otherwise.
+ */
+function sf_import_daemon_restart_get_pid($file = NULL) {
+  if (!$file) {
+    $file = SF_IMPORT_DAEMON_STATUS_FILE;
+  }
+  // Determine the PID from the log file
+  $pid = NULL;
+  if (file_exists($file) && $json = file_get_contents($file)) {
+    foreach ((array) json_decode($json, TRUE) as $key => $value) {
+      if ($key == 'pid') {
+        $pid = $value;
+      }
+    }
+  }
+  if (!$pid) {
+    watchdog('sf_import_daemon_restart', 'Could not find a PID for the SF Import Process Daemon!');
+  }
+
+  return $pid;
+}

@@ -1,0 +1,5 @@
+name = SF Import Daemon Restart
+description = "Restarts the SF Import Daemon after it has reached its memory limit."
+version = 6.x-1.0
+core = 6.x
+dependencies[] = sf_import
